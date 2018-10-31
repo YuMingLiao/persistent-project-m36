@@ -1,0 +1,56 @@
+name:                persistent-project-m36
+version:             0.1.0.0
+github:              "githubuser/persistent-project-m36"
+license:             BSD3
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2018 Author name here"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/persistent-project-m36#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- project-m36
+- persistent
+- persistent-template
+- deepseq
+- binary
+- uuid
+- vector
+- mtl
+- path-pieces
+- either
+- http-api-data
+- transformers
+- text
+- aeson
+- conduit
+- containers
+- errors
+- template-haskell
+- uuid-types
+
+library:
+  source-dirs: . 
+
+tests:
+  persistent-project-m36-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - persistent-project-m36
