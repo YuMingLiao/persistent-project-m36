@@ -1,7 +1,7 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
@@ -73,14 +73,15 @@ main = do
     insert $ BlogPost "One more for good measure" johnId
 
     oneJohnPost <- selectList [BlogPostAuthorId ==. johnId] [] -- [LimitTo 1] not supported yet
-    liftIO $ print (oneJohnPost :: [Entity BlogPost])
+--    liftIO $ print (oneJohnPost :: [Entity BlogPost])
 
     john <- get johnId
-    liftIO $ print (john :: Maybe Person)
+--    liftIO $ print (john :: Maybe Person)
 
     delete janeId
     deleteWhere [BlogPostAuthorId ==. johnId]
 
+createSchema :: SessionId -> Connection -> IO ()
 createSchema sessionId conn = do
   freshUUID <- nextRandom
   toDefinePersonExpr <- handleError $ toDefineExprWithId (Person "Test" 0) "person"

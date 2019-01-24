@@ -9,7 +9,6 @@ import ProjectM36.Base
 import ProjectM36.Tuple
 import qualified ProjectM36.Client as C
 import qualified Data.UUID as U
-import qualified Data.UUID.Types.Internal as UT
 import Data.UUID.V4 (nextRandom)
 import qualified Data.Vector as V
 import ProjectM36.Error
@@ -43,7 +42,6 @@ import Data.Binary
 import Data.Maybe
 import Data.Proxy
 import ProjectM36.Tupleable
-import Debug.Trace
 
 projectM36Settings :: MkPersistSettings
 projectM36Settings = mkPersistSettings $ ConT ''ProjectM36Backend
