@@ -8,6 +8,7 @@ import Language.Haskell.TH (Type(ConT))
 import ProjectM36.Base
 import ProjectM36.Tuple
 import qualified ProjectM36.Client as C
+import qualified ProjectM36.DataFrame as DF
 import qualified Data.UUID as U
 import Data.UUID.V4 (nextRandom)
 import qualified Data.Vector as V
@@ -160,14 +161,25 @@ lookupByKey key = do
         entity <- fromPersistValuesThrow entityInfo' tuple --correct, one match
         return $ Just entity
 
+--supports processing of either RelationTuple or DataFrameTuple
+class DBTuple t where
+  tupAtomForAttributeName :: AttributeName -> t -> Either RelationalError Atom
+
+instance DBTuple RelationTuple where
+  tupAtomForAttributeName = atomForAttributeName
+
+instance DBTuple DF.DataFrameTuple where
+  tupAtomForAttributeName = DF.atomForAttributeName
+
 fromPersistValuesThrow :: (Trans.MonadIO m,
-                           PersistEntity record) => EntityDef -> RelationTuple -> m (Entity record)
+                           PersistEntity record,
+                           DBTuple tup) => EntityDef -> tup -> m (Entity record)
 fromPersistValuesThrow entDef tuple = do
   let body = fromPersistValues $ map getValue (entityFields entDef)
-      getValue field = case atomForAttributeName (unDBName (fieldDB field)) tuple of
+      getValue field = case tupAtomForAttributeName (unDBName (fieldDB field)) tuple of
         Right atom -> atomAsPersistValue atom
         Left err -> throw $ PersistError ("missing field: " `T.append` T.pack (show err))
-      keyAtom = atomForAttributeName (unDBName (fieldDB (entityId entDef))) tuple
+      keyAtom = tupAtomForAttributeName (unDBName (fieldDB (entityId entDef))) tuple
   case keyAtom of
     Left err -> throwIOPersistError ("missing key atom" ++ show err)
     Right keyAtom' -> case keyFromValues [atomAsPersistValue keyAtom'] of
@@ -568,19 +580,24 @@ instance PersistQueryRead ProjectM36Backend where
                Left err -> throwIOPersistError ("count failure: " ++ show err)
                Right c -> return c
 
-         --no select options currently supported (sorting, limiting)
-         selectSourceRes _ (_:_) = Trans.liftIO $ throwIO $ PersistError "select options not yet supported"
-         selectSourceRes filters [] = do
+         selectSourceRes filters limitOffset = do
              (sessionId, conn) <- ask
              entities <- runExceptT $ do
                  restrictionExpr <- lift (selectionFromRestriction filters) >>= hoistEither
                  --restrictionExpr' <- hoistEither restrictionExpr
                  let entDef = entityDef $ dummyFromFilters filters
-                 let tupleMapper tuple = Trans.liftIO $ fromPersistValuesThrow entDef tuple
-                 rel <- Trans.liftIO $ C.executeRelationalExpr sessionId conn restrictionExpr
-                 case rel of
+                     tupleMapper tuple = Trans.liftIO $ fromPersistValuesThrow entDef tuple
+                     (orderExprs', mLimit', mOffset') = processSelectOpts limitOffset
+                     dataFrameExpr = DF.DataFrameExpr {
+                       DF.convertExpr = restrictionExpr,
+                       DF.orderExprs = orderExprs',
+                       DF.offset = mOffset',
+                       DF.limit = mLimit'
+                       }
+                 eDf <- Trans.liftIO $ C.executeDataFrameExpr sessionId conn dataFrameExpr
+                 case eDf of
                      Left err -> Trans.liftIO $ throwIO $ PersistError (T.pack (show err))
-                     Right (Relation _ tupleSet) -> mapM tupleMapper $ asList tupleSet --refactor to use some relation accessors- here we convert a relation to a matrix, effectively (especially to support future sorting)
+                     Right df@DF.DataFrame{} -> mapM tupleMapper (DF.tuples df)
              case entities of
                  Left err -> Trans.liftIO $ throwIO $ PersistError (T.pack $ show err)
                  Right entities' -> return $ return $ CL.sourceList entities'
@@ -632,3 +649,26 @@ toDefineExprWithId record rvName = do
       entValues = map toPersistValue $ toPersistFields record-}
   attrVec <- recordAttributes (entityInfo record)  record
   return $ Define rvName (map NakedAttributeExpr (V.toList attrVec))
+
+processSelectOpts :: PersistEntity record => [SelectOpt record] -> ([C.AttributeOrderExpr], Maybe Integer, Maybe Integer)
+processSelectOpts options = (orderings, mLimit, mOffset)
+  where
+    attrName record = unDBName $ fieldDB (persistFieldDef record)
+    orderings = foldr processAttributeOrdering [] options
+    processAttributeOrdering opt accum = case opt of
+      Asc attr -> DF.AttributeOrderExpr (attrName attr) DF.AscendingOrder : accum
+      Desc attr -> DF.AttributeOrderExpr (attrName attr) DF.DescendingOrder : accum
+      OffsetBy _ -> accum
+      LimitTo _ -> accum
+    mLimit = foldr (\opt accum -> case opt of
+                       Asc _ -> accum
+                       Desc _ -> accum
+                       OffsetBy _ -> accum
+                       LimitTo val -> Just (fromIntegral val)) Nothing options
+    mOffset = foldr (\opt accum -> case opt of
+                        Asc _ -> accum
+                        Desc _ -> accum
+                        OffsetBy c -> Just (fromIntegral c)
+                        LimitTo _ -> accum) Nothing options
+    
+      
