@@ -41,6 +41,8 @@ import Control.DeepSeq
 import Data.Binary
 import Data.Maybe
 
+import Debug.Trace
+
 projectM36Settings :: MkPersistSettings
 projectM36Settings = mkPersistSettings $ ConT ''ProjectM36Backend
 
@@ -572,7 +574,7 @@ instance PersistQueryRead ProjectM36Backend where
                  case rel of
                     Left err -> left err
                     Right rel' -> case singletonTuple rel' of
-                          Nothing -> Trans.liftIO $ throwIO $ PersistError "failed to get count tuple"
+                          Nothing -> pure 0
                           Just tuple -> case atomForAttributeName "persistcount" tuple of
                              (Right c) -> return (castInt c)
                              Left err -> left err
