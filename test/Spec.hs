@@ -1,17 +1,13 @@
-{-# LANGUAGE EmptyDataDecls             #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE QuasiQuotes                #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 import           Control.Monad.IO.Class  (liftIO)
 import           Database.Persist
@@ -23,7 +19,8 @@ import           Control.Monad.Reader
 import           Data.Proxy
 import           ProjectM36.Tupleable
 import           GHC.Generics
-import           Data.Text
+import           Test.HUnit
+import           System.Exit
 import qualified Control.DeepSeq as N
 import qualified Data.Binary as B
 import Data.UUID.V4 (nextRandom)
@@ -57,30 +54,43 @@ handleIOErrors m = do
 
 main :: IO ()
 main = do
+  tcounts <- runTestTT (TestList [testOps])
+  if errors tcounts + failures tcounts > 0 then exitFailure else exitSuccess
+
+testOps :: Test
+testOps = TestCase $ do
   --connect to the database
   let connInfo = InProcessConnectionInfo NoPersistence emptyNotificationCallback []
   _ <- connectProjectM36 connInfo
   conn <- handleIOError $ connectProjectM36 connInfo
   sessionId <- handleIOError $ createSessionAtHead conn "master"
   flip runProjectM36Conn (sessionId, conn) $ do
-    (sessionId,conn) <- ask
     liftIO $ createSchema sessionId conn  
 
-    johnId <- insert $ Person "John Doe" 35
-    janeId <- insert $ Person "Jane Doe" 2
+    let john = Person "John Doe" 35
+        jane = Person "Jane Doe" 2
+        
+    johnId <- insert john
+    janeId <- insert jane
 
-    insert $ BlogPost "My fr1st p0st" johnId
-    insert $ BlogPost "One more for good measure" johnId
+    _ <- insert $ BlogPost "My fr1st p0st" johnId
+    _ <- insert $ BlogPost "One more for good measure" johnId
 
-    oneJohnPost <- selectList [BlogPostAuthorId ==. johnId] [] -- [LimitTo 1] not supported yet
-    liftIO $ print (oneJohnPost :: [Entity BlogPost])
+    oneJohnPost <- map entityVal <$> selectList [BlogPostAuthorId ==. johnId] [LimitTo 1]
+    liftIO $ assertEqual "oneJohnPost count" 1 (length oneJohnPost)
+    liftIO $ assertEqual "oneJohnPost id" johnId (blogPostAuthorId (head oneJohnPost))
 
-    john <- get johnId
-    liftIO $ print (john :: Maybe Person)
+    mJohn' <- get johnId
+
+    liftIO $ assertEqual "john name" (Just (personName john)) (personName <$> mJohn')
 
     delete janeId
+    janeCount <- count [PersonId ==. janeId]
+    liftIO $ assertEqual "jane deleted count" 0 janeCount
+    
     deleteWhere [BlogPostAuthorId ==. johnId]
 
+createSchema :: SessionId -> Connection -> IO ()
 createSchema sessionId conn = do
   freshUUID <- nextRandom
   toDefinePersonExpr <- handleError $ toDefineExprWithId (Person "Test" 0) "person"

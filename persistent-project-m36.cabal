@@ -1,0 +1,32 @@
+Name: persistent-project-m36
+Version: 0.1
+License: PublicDomain
+Build-Type: Simple
+Homepage: https://github.com/YuMingLiao/persistent-project-m36
+Bug-Reports: https://github.com/YuMingLiao/persistent-project-m36/issues
+Author: YuMingLiao
+Stability: experimental
+Category: Relational Algebra
+Maintainer: ?
+Cabal-Version: >= 1.10
+Synopsis: Relational Algebra Engine Persistent Driver
+Description: A persistent driver for relational algebra engine Project:M36.
+
+Source-Repository head
+    Type: git
+    location: https://github.com/YuMingLiao/persistent-project-m36
+
+Library
+  Exposed-Modules: Database.Persist.ProjectM36
+  Default-Language: Haskell2010
+  Build-Depends: base>=4.8, project-m36>=0.6, binary, mtl, deepseq, http-api-data, conduit, containers, path-pieces, aeson, transformers, vector, uuid, template-haskell, either, persistent, text, uuid, persistent-template, errors
+  GHC-Options: -Wall
+
+Test-Suite test-persistent-driver
+  Default-Language: Haskell2010
+  Build-Depends: base>=4.8, project-m36>=0.6, HUnit, text, uuid, deepseq, binary, mtl, persistent, persistent-project-m36, persistent-template
+  Type: exitcode-stdio-1.0  
+  GHC-Options: -Wall
+  Hs-Source-Dirs: ./test
+  Other-Modules: Model
+  Main-Is: Spec.hs
